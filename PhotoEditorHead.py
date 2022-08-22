@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageOps
 from tkinter.ttk import Notebook
 import os
 
@@ -53,6 +53,11 @@ class PhotoEditor:
         rotate_menu.add_command(label='Rotate right by 180', command=lambda: self.rotate_current_image(-180))
         transform_menu.add_cascade(label='Rotate', menu=rotate_menu)
 
+        flip_menu = Menu(edit_menu, tearoff=0)
+        edit_menu.add_cascade(label='Flip', menu=flip_menu)
+        flip_menu.add_command(label='Flip horizontally', command=lambda: self.flip_image('horizontally'))
+        flip_menu.add_command(label='Flip vertically', command=lambda: self.flip_image('vertically'))
+
         string_menu.add_cascade(label='Edit', menu=edit_menu)
 
     def draw_widgets(self):
@@ -100,11 +105,11 @@ class PhotoEditor:
         if old_path[-1] == '*':
             old_path = old_path[:-1]
         path_for_save = fd.asksaveasfilename(initialdir=old_path,
-                                             filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'),))
+                                             filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'), ))
         if not path_for_save:
             return
 
-        new_path, new_ext = os.path.splitext(new_path)
+        path_for_save, new_ext = os.path.splitext(path_for_save)
         if not new_ext:
             new_ext = old_ext
         elif old_ext != new_ext:
@@ -112,13 +117,13 @@ class PhotoEditor:
                                                        f' and old extension: {old_ext}')
             return
         image = self.opened_images[tab_number][1]
-        image.save(new_path + new_ext)
+        image.save(path_for_save + new_ext)
         image.close()
 
         del self.opened_images[tab_number]
         self.image_tabs.forget(current_tab)
 
-        self.add_new_image(new_path + new_ext)
+        self.add_new_image(path_for_save + new_ext)
 
 
 
@@ -148,6 +153,20 @@ class PhotoEditor:
         image = image.rotate(degrees)
 
         self.update_image_in_app(current_tab, image)
+
+    def flip_image(self, flip_type):
+        current_tab = self.image_tabs.select()
+        if not current_tab:
+            return
+        tab_number = self.image_tabs.index(current_tab)
+        image = self.opened_images[tab_number][1]
+        if flip_type == 'horizontally':
+            image = ImageOps.mirror(image)
+        elif flip_type == 'vertically':
+            image = ImageOps.flip(image)
+
+        self.update_image_in_app(current_tab, image)
+
 
     def _close(self, event=None):
         self.root.quit()
