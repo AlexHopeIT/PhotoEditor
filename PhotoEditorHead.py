@@ -38,27 +38,44 @@ class PhotoEditor:
         menu_file.add_separator()
         menu_file.add_command(label='Exit', command=self._close)
 
-        string_menu.add_cascade(label='File', menu=menu_file)
+
 
         self.root.configure(menu=string_menu)
 
         edit_menu = Menu(string_menu, tearoff=0)
 
         transform_menu = Menu(edit_menu, tearoff=0)
-        edit_menu.add_cascade(label='Transform', menu=transform_menu)
         rotate_menu = Menu(transform_menu, tearoff=0)
         rotate_menu.add_command(label='Rotate left by 90', command=lambda: self.rotate_current_image(90))
         rotate_menu.add_command(label='Rotate right by 90', command=lambda: self.rotate_current_image(-90))
         rotate_menu.add_command(label='Rotate left by 180', command=lambda: self.rotate_current_image(180))
         rotate_menu.add_command(label='Rotate right by 180', command=lambda: self.rotate_current_image(-180))
-        transform_menu.add_cascade(label='Rotate', menu=rotate_menu)
+
 
         flip_menu = Menu(edit_menu, tearoff=0)
-        edit_menu.add_cascade(label='Flip', menu=flip_menu)
         flip_menu.add_command(label='Flip horizontally', command=lambda: self.flip_image('horizontally'))
         flip_menu.add_command(label='Flip vertically', command=lambda: self.flip_image('vertically'))
 
+        resize_menu = Menu(edit_menu, tearoff=0)
+        resize_menu.add_command(label='10% of original size', command=lambda: self.resize_image(10))
+        resize_menu.add_command(label='20% of original size', command=lambda: self.resize_image(20))
+        resize_menu.add_command(label='25% of original size', command=lambda: self.resize_image(25))
+        resize_menu.add_command(label='40% of original size', command=lambda: self.resize_image(40))
+        resize_menu.add_command(label='50% of original size', command=lambda: self.resize_image(50))
+        resize_menu.add_command(label='65% of original size', command=lambda: self.resize_image(65))
+        resize_menu.add_command(label='80% of original size', command=lambda: self.resize_image(80))
+        resize_menu.add_command(label='120% of original size', command=lambda: self.resize_image(120))
+        resize_menu.add_command(label='135% of original size', command=lambda: self.resize_image(135))
+        resize_menu.add_command(label='150% of original size', command=lambda: self.resize_image(150))
+        resize_menu.add_command(label='200% of original size', command=lambda: self.resize_image(200))
+
+
+        string_menu.add_cascade(label='File', menu=menu_file)
         string_menu.add_cascade(label='Edit', menu=edit_menu)
+        transform_menu.add_cascade(label='Rotate', menu=rotate_menu)
+        edit_menu.add_cascade(label='Transform', menu=transform_menu)
+        edit_menu.add_cascade(label='Flip', menu=flip_menu)
+        edit_menu.add_cascade(label='Resize', menu=resize_menu)
 
     def draw_widgets(self):
         self.image_tabs.pack(fill='both', expand=1)
@@ -82,8 +99,18 @@ class PhotoEditor:
         self.image_tabs.add(image_tab, text=paths_to_images.split('/')[-1])
         self.image_tabs.select(image_tab)
 
-    def save_image_in_program(self):
+    def get_things_for_work(self):
+        """:returns current (tab, image, path)
+        """
         current_tab = self.image_tabs.select()
+        if not current_tab:
+            return None, None, None
+        tab_number = self.image_tabs.index(current_tab)
+        path, image = self.opened_images[tab_number]
+        return current_tab, path, image
+
+    def save_image_in_program(self):
+        current_tab, path, image = self.get_things_for_work()
         if not current_tab:
             return
         tab_number = self.image_tabs.index(current_tab)
@@ -96,16 +123,16 @@ class PhotoEditor:
         self.image_tabs.add(current_tab, text=path.split('/')[-1])
 
     def save_image_as(self):
-        current_tab = self.image_tabs.select()
+        current_tab, path, image = self.get_things_for_work()
         if not current_tab:
             return
         tab_number = self.image_tabs.index(current_tab)
 
-        old_path, old_ext = os.path.splitext(self.opened_images[tab_number][0])
+        old_path, old_ext = os.path.splitext(path)
         if old_path[-1] == '*':
             old_path = old_path[:-1]
         path_for_save = fd.asksaveasfilename(initialdir=old_path,
-                                             filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'), ))
+                                             filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'),))
         if not path_for_save:
             return
 
@@ -116,7 +143,7 @@ class PhotoEditor:
             mb.showerror('ERROR! Incorrect extension', f'New extension: {new_ext},'
                                                        f' and old extension: {old_ext}')
             return
-        image = self.opened_images[tab_number][1]
+
         image.save(path_for_save + new_ext)
         image.close()
 
@@ -124,7 +151,6 @@ class PhotoEditor:
         self.image_tabs.forget(current_tab)
 
         self.add_new_image(path_for_save + new_ext)
-
 
 
     def update_image_in_app(self, current_tab, image):
@@ -167,6 +193,19 @@ class PhotoEditor:
 
         self.update_image_in_app(current_tab, image)
 
+    def resize_image(self, percents):
+        current_tab = self.image_tabs.select()
+        if not current_tab:
+            return
+        tab_number = self.image_tabs.index(current_tab)
+        image = self.opened_images[tab_number][1]
+
+        w, h = image.size
+        w = (w * percents) // 100
+        h = (h * percents) // 100
+
+        image = image.resize((w, h), Image.ANTIALIAS)
+        self.update_image_in_app(current_tab, image)
 
     def _close(self, event=None):
         self.root.quit()
