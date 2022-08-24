@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
-from PIL import Image, ImageTk, ImageOps
+from PIL import Image, ImageTk, ImageOps, ImageFilter
 from tkinter.ttk import Notebook
 import os
 
@@ -69,6 +69,17 @@ class PhotoEditor:
         resize_menu.add_command(label='150% of original size', command=lambda: self.resize_image(150))
         resize_menu.add_command(label='200% of original size', command=lambda: self.resize_image(200))
 
+        filter_menu = Menu(edit_menu, tearoff=0)
+        filter_menu.add_command(label='Blur', command=lambda: self.impose_filter(ImageFilter.BLUR))
+        filter_menu.add_command(label='Contour', command=lambda: self.impose_filter(ImageFilter.CONTOUR))
+        filter_menu.add_command(label='Detail', command=lambda: self.impose_filter(ImageFilter.DETAIL))
+        filter_menu.add_command(label='Edge enhance', command=lambda: self.impose_filter(ImageFilter.EDGE_ENHANCE))
+        filter_menu.add_command(label='Emboss', command=lambda: self.impose_filter(ImageFilter.EMBOSS))
+        filter_menu.add_command(label='Find edges', command=lambda: self.impose_filter(ImageFilter.FIND_EDGES))
+        filter_menu.add_command(label='Sharpen', command=lambda: self.impose_filter(ImageFilter.SHARPEN))
+        filter_menu.add_command(label='Smooth', command=lambda: self.impose_filter(ImageFilter.SMOOTH))
+        filter_menu.add_command(label='Smooth more', command=lambda: self.impose_filter(ImageFilter.SMOOTH_MORE))
+
 
         string_menu.add_cascade(label='File', menu=menu_file)
         string_menu.add_cascade(label='Edit', menu=edit_menu)
@@ -76,6 +87,7 @@ class PhotoEditor:
         edit_menu.add_cascade(label='Transform', menu=transform_menu)
         edit_menu.add_cascade(label='Flip', menu=flip_menu)
         edit_menu.add_cascade(label='Resize', menu=resize_menu)
+        edit_menu.add_cascade(label='Filters', menu=filter_menu)
 
     def draw_widgets(self):
         self.image_tabs.pack(fill='both', expand=1)
@@ -100,7 +112,7 @@ class PhotoEditor:
         self.image_tabs.select(image_tab)
 
     def get_things_for_work(self):
-        """:returns current (tab, image, path)
+        """:returns current (tab, path, image)
         """
         current_tab = self.image_tabs.select()
         if not current_tab:
@@ -115,7 +127,6 @@ class PhotoEditor:
             return
         tab_number = self.image_tabs.index(current_tab)
 
-        path, image = self.opened_images[tab_number]
         if path[-1] == '*':
             path = path[:-1]
         self.opened_images[tab_number][0] = path
@@ -170,22 +181,19 @@ class PhotoEditor:
             self.image_tabs.tab(current_tab, text=image_name)
 
     def rotate_current_image(self, degrees):
-        current_tab = self.image_tabs.select()
+        current_tab, path, image = self.get_things_for_work()
         if not current_tab:
             return
-        tab_number = self.image_tabs.index(current_tab)
 
-        image = self.opened_images[tab_number][1]
         image = image.rotate(degrees)
 
         self.update_image_in_app(current_tab, image)
 
     def flip_image(self, flip_type):
-        current_tab = self.image_tabs.select()
+        current_tab, path, image = self.get_things_for_work()
         if not current_tab:
             return
-        tab_number = self.image_tabs.index(current_tab)
-        image = self.opened_images[tab_number][1]
+
         if flip_type == 'horizontally':
             image = ImageOps.mirror(image)
         elif flip_type == 'vertically':
@@ -194,17 +202,23 @@ class PhotoEditor:
         self.update_image_in_app(current_tab, image)
 
     def resize_image(self, percents):
-        current_tab = self.image_tabs.select()
+        current_tab, path, image = self.get_things_for_work()
         if not current_tab:
             return
-        tab_number = self.image_tabs.index(current_tab)
-        image = self.opened_images[tab_number][1]
 
         w, h = image.size
         w = (w * percents) // 100
         h = (h * percents) // 100
 
         image = image.resize((w, h), Image.ANTIALIAS)
+        self.update_image_in_app(current_tab, image)
+
+    def impose_filter(self, filter_type):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+
+        image = image.filter(filter_type)
         self.update_image_in_app(current_tab, image)
 
     def _close(self, event=None):
