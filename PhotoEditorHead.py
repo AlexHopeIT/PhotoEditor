@@ -1,9 +1,13 @@
 from tkinter import *
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
+import pyperclip
 from PIL import Image, ImageTk, ImageOps, ImageFilter
 from tkinter.ttk import Notebook
 import os
+import json
+
+CONFIG_FILE = 'config.json'
 
 
 class PhotoEditor:
@@ -31,6 +35,12 @@ class PhotoEditor:
         self.root.bind('<Escape>', self._close)
         self.root.protocol('WM_DELETE_WINDOW', self._close)
 
+        if not os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump({'opened_images': []}, f)
+        else:
+            self.open_images_from_config()
+
     def run(self):
         self.draw_menu()
         self.draw_widgets()
@@ -47,6 +57,18 @@ class PhotoEditor:
         menu_file.add_command(label='Save', command=self.save_image_in_program)
         menu_file.add_command(label='Save all', command=self.save_all_images)
         menu_file.add_separator()
+        menu_file.add_command(label='Close this image', command=self.close_current_image)
+        menu_file.add_command(label='Close and delete this image', command=self.delete_current_image)
+        menu_file.add_separator()
+
+        clipboard_menu = Menu(menu_file, tearoff=0)
+        clipboard_menu.add_command(label='Add name of image in clipboard', command=self.save_name_in_clipboard)
+        clipboard_menu.add_command(label='Add directory of image in clipboard',
+                                   command=self.save_directory_in_clipboard)
+        clipboard_menu.add_command(label='Add path of image in clipboard', command=self.save_path_in_clipboard)
+        menu_file.add_cascade(label='Clipboard', menu=clipboard_menu)
+        menu_file.add_separator()
+
         menu_file.add_command(label='Exit', command=self._close)
 
         self.root.configure(menu=string_menu)
@@ -109,6 +131,13 @@ class PhotoEditor:
         for path in paths_to_images:
             self.add_new_image(path)
 
+    def open_images_from_config(self):
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        paths = config['opened_images']
+        for path in paths:
+            self.add_new_image(path)
+
     def add_new_image(self, paths_to_images):
         image = Image.open(paths_to_images)
         image_tk = ImageTk.PhotoImage(image)
@@ -121,7 +150,7 @@ class PhotoEditor:
         image_panel.create_image(0, 0, image=image_tk, anchor='nw')
         image_panel.pack(expand='yes')
 
-        self.image_tabs.add(image_tab, text=paths_to_images.split('/')[-1])
+        self.image_tabs.add(image_tab, text=os.path.split(paths_to_images)[1])
         self.image_tabs.select(image_tab)
 
     def get_things_for_work(self):
@@ -144,7 +173,7 @@ class PhotoEditor:
             path = path[:-1]
         self.opened_images[tab_number][0] = path
         image.save(path)
-        self.image_tabs.add(current_tab, text=path.split('/')[-1])
+        self.image_tabs.add(current_tab, text=os.path.split(path)[1])
 
     def save_image_as(self):
         current_tab, path, image = self.get_things_for_work()
@@ -153,8 +182,8 @@ class PhotoEditor:
         tab_number = self.image_tabs.index(current_tab)
 
         old_path, old_ext = os.path.splitext(path)
-        if old_path[-1] == '*':
-            old_path = old_path[:-1]
+        if old_ext[-1] == '*':
+            old_ext = old_ext[:-1]
         path_for_save = fd.asksaveasfilename(initialdir=old_path,
                                              filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'),))
         if not path_for_save:
@@ -183,7 +212,7 @@ class PhotoEditor:
             path = path[:-1]
             self.opened_images[index][0] = path
             image.save(path)
-            self.image_tabs.tab(index, text=path.split('/')[-1])
+            self.image_tabs.tab(index, text=os.path.split(path)[1])
 
     def update_image_in_app(self, current_tab, image):
         tab_number = self.image_tabs.index(current_tab)
@@ -201,8 +230,35 @@ class PhotoEditor:
         if image_path[-1] != '*':
             image_path += '*'
             self.opened_images[tab_number][0] = image_path
-            image_name = image_path.split('/')[-1]
+            image_name = os.path.split(image_path)[1]
             self.image_tabs.tab(current_tab, text=image_name)
+
+    def close_current_image(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+        index = self.image_tabs.index(current_tab)
+
+        image.close()
+
+        del self.opened_images[index]
+        self.image_tabs.forget(current_tab)
+
+    def delete_current_image(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+        index = self.image_tabs.index(current_tab)
+
+        if not mb.askokcancel('Delete image', 'Are you sure you wanna delete this image?\n'
+                                              'This operation is unrecoverable'):
+            return
+
+        image.close()
+        os.remove(path)
+
+        del self.opened_images[index]
+        self.image_tabs.forget(current_tab)
 
     def rotate_current_image(self, degrees):
         current_tab, path, image = self.get_things_for_work()
@@ -279,10 +335,55 @@ class PhotoEditor:
 
         self.canvas_for_selection.delete(self.selection_rect)
 
+        self.crop_at_selection()
+
         self.selection_rect = None
         self.canvas_for_selection = None
         self.selection_top_x, self.selection_top_y = 0, 0
         self.selection_bottom_x, self.selection_bottom_y = 0, 0
+
+    def crop_at_selection(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+        image = image.crop((self.selection_top_x, self.selection_top_y,
+                            self.selection_bottom_x, self.selection_bottom_y))
+        self.update_image_in_app(current_tab, image)
+
+    def save_name_in_clipboard(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+
+        name = os.path.split(path)[1]
+        pyperclip.copy(name)
+
+        mb.showinfo('Clipboard', f'Name {name} copy to clipboard')
+
+    def save_directory_in_clipboard(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+
+        directory = os.path.split(path)[0]
+        pyperclip.copy(directory)
+
+        mb.showinfo('Clipboard', f'Directory {directory} copy to clipboard')
+
+    def save_path_in_clipboard(self):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+
+        pyperclip.copy(path)
+
+        mb.showinfo('Clipboard', f'Path {path} copy to clipboard')
+
+    def save_images_to_config(self):
+        paths = [(path[:-1] if path[-1] == '*' else path) for (path, image) in self.opened_images]
+        images = {'opened_images': paths}
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(images, f, indent=4)
 
     def unsaved_images(self):
         for path, _ in self.opened_images:  # "_" is "image"
@@ -294,6 +395,8 @@ class PhotoEditor:
         if self.unsaved_images():
             if not mb.askyesno('There are unsaved changes of images', 'You need to save changes. Exit anyway?'):
                 return
+
+        self.save_images_to_config()
         self.root.quit()
 
 
