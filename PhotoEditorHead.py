@@ -6,6 +6,7 @@ from PIL import Image, ImageTk, ImageOps, ImageFilter
 from tkinter.ttk import Notebook
 import os
 import json
+import numpy as np
 
 CONFIG_FILE = 'config.json'
 
@@ -114,6 +115,22 @@ class PhotoEditor:
         crop_menu.add_command(label='Start selection', command=self.start_selection)
         crop_menu.add_command(label='Stop selection', command=self.stop_selection)
 
+        convert_menu = Menu(edit_menu, tearoff=0)
+        convert_menu.add_command(label='Black and White', command=lambda: self.convert_current_image('1'))
+        convert_menu.add_command(label='More Grey', command=lambda: self.convert_current_image('L'))
+        convert_menu.add_command(label='RGB', command=lambda: self.convert_current_image('RGB'))
+        convert_menu.add_command(label='RGBA', command=lambda: self.convert_current_image('RGBA'))
+        convert_menu.add_command(label='CMYK', command=lambda: self.convert_current_image('CMYK'))
+        convert_menu.add_command(label='YCbCr', command=lambda: self.convert_current_image('YCbCr'))
+        convert_menu.add_command(label='LAB', command=lambda: self.convert_current_image('LAB'))
+        convert_menu.add_command(label='HSV', command=lambda: self.convert_current_image('HSV'))
+        convert_menu.add_command(label='32-bit signed integer pixels', command=lambda: self.convert_current_image('I'))
+        convert_menu.add_command(label='32-bit floating point pixels', command=lambda: self.convert_current_image('F'))
+        convert_menu.add_command(label='Roll RGB colors', command=lambda: self.convert_current_image('roll'))
+        convert_menu.add_command(label='Red', command=lambda: self.convert_current_image('R'))
+        convert_menu.add_command(label='Green', command=lambda: self.convert_current_image('G'))
+        convert_menu.add_command(label='Blue', command=lambda: self.convert_current_image('B'))
+
         string_menu.add_cascade(label='File', menu=menu_file)
         string_menu.add_cascade(label='Edit', menu=edit_menu)
         transform_menu.add_cascade(label='Rotate', menu=rotate_menu)
@@ -122,6 +139,7 @@ class PhotoEditor:
         edit_menu.add_cascade(label='Resize', menu=resize_menu)
         edit_menu.add_cascade(label='Filters', menu=filter_menu)
         edit_menu.add_cascade(label='Crop', menu=crop_menu)
+        edit_menu.add_cascade(label='Convert', menu=convert_menu)
 
     def draw_widgets(self):
         self.image_tabs.pack(fill='both', expand=1)
@@ -349,6 +367,35 @@ class PhotoEditor:
         image = image.crop((self.selection_top_x, self.selection_top_y,
                             self.selection_bottom_x, self.selection_bottom_y))
         self.update_image_in_app(current_tab, image)
+
+    def convert_current_image(self, mode):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+        if mode == 'roll':
+            if image.mode != 'RGB':
+                mb.showerror('RGB mode error', f'Can`t roll with not RGB mode "{image.mode}"')
+                return
+
+            image = Image.fromarray(np.array(image)[:, :, ::-1])
+            self.update_image_in_app(current_tab, image)
+            return
+
+        elif mode in 'R G B'.split(' '):
+            if image.mode != 'RGB':
+                mb.showerror('RGB mode error', f'Can`t split channel with not RGB mode "{image.mode}"')
+                return
+            colors_channel = np.array(image)
+            colors_channel[:, :, (mode != 'R', mode != 'G', mode != 'B')] *= 0
+            image = Image.fromarray(colors_channel)
+            self.update_image_in_app(current_tab, image)
+            return
+
+        try:
+            image = image.convert(mode)
+            self.update_image_in_app(current_tab, image)
+        except ValueError as e:
+            mb.showerror('Conversion error', f'Conversion error: {e}')
 
     def save_name_in_clipboard(self):
         current_tab, path, image = self.get_things_for_work()
