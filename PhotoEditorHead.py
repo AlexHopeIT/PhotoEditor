@@ -2,11 +2,13 @@ from tkinter import *
 from tkinter import filedialog as fd
 from tkinter import messagebox as mb
 import pyperclip
-from PIL import Image, ImageTk, ImageOps, ImageFilter
+from PIL import Image, ImageTk, ImageOps, ImageFilter, ImageEnhance
 from tkinter.ttk import Notebook
 import os
 import json
 import numpy as np
+
+from enhance_slider_window import EnhanceSliderWindow
 
 CONFIG_FILE = 'config.json'
 
@@ -131,6 +133,15 @@ class PhotoEditor:
         convert_menu.add_command(label='Green', command=lambda: self.convert_current_image('G'))
         convert_menu.add_command(label='Blue', command=lambda: self.convert_current_image('B'))
 
+        enhance_menu = Menu(edit_menu, tearoff=0)
+        enhance_menu.add_command(label='Color', command=lambda: self.enhance_current_image('Color', ImageEnhance.Color))
+        enhance_menu.add_command(label='Contrast',
+                                 command=lambda: self.enhance_current_image('Contrast', ImageEnhance.Contrast))
+        enhance_menu.add_command(label='Brightness',
+                                 command=lambda: self.enhance_current_image('Brightness', ImageEnhance.Brightness))
+        enhance_menu.add_command(label='Sharpness',
+                                 command=lambda: self.enhance_current_image('Sharpness', ImageEnhance.Color))
+
         string_menu.add_cascade(label='File', menu=menu_file)
         string_menu.add_cascade(label='Edit', menu=edit_menu)
         transform_menu.add_cascade(label='Rotate', menu=rotate_menu)
@@ -140,6 +151,7 @@ class PhotoEditor:
         edit_menu.add_cascade(label='Filters', menu=filter_menu)
         edit_menu.add_cascade(label='Crop', menu=crop_menu)
         edit_menu.add_cascade(label='Convert', menu=convert_menu)
+        edit_menu.add_cascade(label='Enhance', menu=enhance_menu)
 
     def draw_widgets(self):
         self.image_tabs.pack(fill='both', expand=1)
@@ -172,7 +184,7 @@ class PhotoEditor:
         self.image_tabs.select(image_tab)
 
     def get_things_for_work(self):
-        """:returns current (tab, path, image)
+        """ :returns current (tab, path, image)
         """
         current_tab = self.image_tabs.select()
         if not current_tab:
@@ -396,6 +408,12 @@ class PhotoEditor:
             self.update_image_in_app(current_tab, image)
         except ValueError as e:
             mb.showerror('Conversion error', f'Conversion error: {e}')
+
+    def enhance_current_image(self, name, enhance):
+        current_tab, path, image = self.get_things_for_work()
+        if not current_tab:
+            return
+        EnhanceSliderWindow(self.root, name, enhance, image, current_tab, self.update_image_in_app)
 
     def save_name_in_clipboard(self):
         current_tab, path, image = self.get_things_for_work()
