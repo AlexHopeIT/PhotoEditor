@@ -9,6 +9,7 @@ import json
 import numpy as np
 
 from enhance_slider_window import EnhanceSliderWindow
+from image_info import ImageInfo
 
 CONFIG_FILE = 'config.json'
 
@@ -19,6 +20,7 @@ class PhotoEditor:
         # self.root.configure(height=150, width=150, bg='#943232') ?????????? how????
         self.image_tabs = Notebook(self.root)
         self.opened_images = []
+        self.last_viewed_images = []
 
         self.selection_top_x = 0
         self.selection_top_y = 0
@@ -27,6 +29,8 @@ class PhotoEditor:
 
         self.canvas_for_selection = None
         self.selection_rect = None
+
+        self.open_recent_menu = None
 
         self.init()
 
@@ -40,7 +44,7 @@ class PhotoEditor:
 
         if not os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, 'w') as f:
-                json.dump({'opened_images': []}, f)
+                json.dump({'opened_images': [], 'last_viewed_images': []}, f)
         else:
             self.open_images_from_config()
 
@@ -55,11 +59,19 @@ class PhotoEditor:
 
         menu_file = Menu(string_menu, tearoff=0)
         menu_file.add_command(label='Open', command=self.open_several_images)
+
+        self.open_recent_menu = Menu(menu_file, tearoff=0)
+        menu_file.add_cascade(label="Open Recent", menu=self.open_recent_menu)
+        for path in self.last_viewed_images:
+            self.open_recent_menu.add_command(label=path, command=lambda x=path: self.add_new_image(x))
+
         menu_file.add_separator()
+
         menu_file.add_command(label='Save as', command=self.save_image_as)
         menu_file.add_command(label='Save', command=self.save_image_in_program)
         menu_file.add_command(label='Save all', command=self.save_all_images)
         menu_file.add_separator()
+
         menu_file.add_command(label='Close this image', command=self.close_current_image)
         menu_file.add_command(label='Close and delete this image', command=self.delete_current_image)
         menu_file.add_separator()
@@ -153,45 +165,74 @@ class PhotoEditor:
         edit_menu.add_cascade(label='Convert', menu=convert_menu)
         edit_menu.add_cascade(label='Enhance', menu=enhance_menu)
 
+    def update_recent_menu(self):
+        if self.open_recent_menu is None:
+            return
+        self.open_recent_menu.delete(0, 'end')
+        for path in self.last_viewed_images:
+            self.open_recent_menu.add_command(label=path,
+                                              command=lambda x=path: self.add_new_image(x))
+
     def draw_widgets(self):
         self.image_tabs.pack(fill='both', expand=1)
 
     def open_several_images(self):
         paths_to_images = fd.askopenfilenames(filetypes=(('Images', '*.jpeg;*.png;*.jpg;*.bmp;*.ico'),))
-        for path in paths_to_images:
-            self.add_new_image(path)
+        for image_path in paths_to_images:
+            self.add_new_image(image_path)
+
+            if image_path not in self.last_viewed_images:
+                self.last_viewed_images.append(image_path)
+            else:
+                self.last_viewed_images.remove(image_path)
+                self.last_viewed_images.append(image_path)
+
+            if len(self.last_viewed_images) > 5:
+                del self.last_viewed_images[0]
+
+        self.update_recent_menu()
 
     def open_images_from_config(self):
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
+
+        self.last_viewed_images = config['last_viewed_images']
         paths = config['opened_images']
         for path in paths:
             self.add_new_image(path)
 
-    def add_new_image(self, paths_to_images):
-        image = Image.open(paths_to_images)
-        image_tk = ImageTk.PhotoImage(image)
-        self.opened_images.append([paths_to_images, image])
+    def add_new_image(self, image_path):
+        opened_images = [info.path for info in self.opened_images]
+        if image_path in opened_images:
+            index = opened_images.index(image_path)
+            self.image_tabs.select(index)
+            return
 
+        image = Image.open(image_path)
         image_tab = Frame(self.image_tabs)
 
-        image_panel = Canvas(image_tab, width=image_tk.width(), height=image_tk.height(), bd=0, highlightthickness=0)
+        image_info = ImageInfo(image, image_path, image_tab)
+        self.opened_images.append(image_info)
+
+        image_tk = image_info.image_tk
+
+        image_panel = Canvas(image_tab, width=image.width,
+                             height=image.height, bd=0, highlightthickness=0)
         image_panel.image = image_tk
         image_panel.create_image(0, 0, image=image_tk, anchor='nw')
-        image_panel.pack(expand='yes')
+        image_panel.pack(expand="yes")
 
-        self.image_tabs.add(image_tab, text=os.path.split(paths_to_images)[1])
+        image_info.canvas = image_panel
+
+        self.image_tabs.add(image_tab, text=image_info.file_name())
         self.image_tabs.select(image_tab)
 
     def get_things_for_work(self):
-        """ :returns current (tab, path, image)
-        """
         current_tab = self.image_tabs.select()
         if not current_tab:
-            return None, None, None
+            return None
         tab_number = self.image_tabs.index(current_tab)
-        path, image = self.opened_images[tab_number]
-        return current_tab, path, image
+        return self.opened_images[tab_number]
 
     def save_image_in_program(self):
         current_tab, path, image = self.get_things_for_work()
@@ -445,14 +486,14 @@ class PhotoEditor:
         mb.showinfo('Clipboard', f'Path {path} copy to clipboard')
 
     def save_images_to_config(self):
-        paths = [(path[:-1] if path[-1] == '*' else path) for (path, image) in self.opened_images]
-        images = {'opened_images': paths}
+        paths = [info.full_path(no_star=True) for info in self.opened_images]
+        images = {'opened_images': paths, 'last_viewed_images': self.last_viewed_images}
         with open(CONFIG_FILE, 'w') as f:
             json.dump(images, f, indent=4)
 
     def unsaved_images(self):
-        for path, _ in self.opened_images:  # "_" is "image"
-            if path[-1] == '*':
+        for info in self.opened_images:
+            if info.unsaved:
                 return True
             return False
 
