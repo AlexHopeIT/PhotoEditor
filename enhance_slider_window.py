@@ -2,14 +2,13 @@ from tkinter import *
 
 
 class EnhanceSliderWindow(Toplevel):
-    def __init__(self, root, name, enhance, image, current_tab, update_method):
+    def __init__(self, root, name, enhance, image_info, update_method):
         super().__init__(root)
 
         self.name = name
-        self.enhancer = enhance(image)
-        self.original = image
-        self.image = image.copy()
-        self.current_tab = current_tab
+        self.image_info = image_info
+        self.enhancer = image_info.get_enhancer(enhance)
+        self.original = image_info.image
         self.update_method = update_method
 
         self.init()
@@ -21,7 +20,7 @@ class EnhanceSliderWindow(Toplevel):
             orient='horizontal',
             command=self.value_changed
         )
-        self.apply = Button(self, text='Apply', command=self.close)
+        self.apply = Button(self, text='Apply', command=self.apply)
         self.cancel = Button(self, text='Cancel', command=self.cancel)
 
         self.draw_widgets()
@@ -40,11 +39,19 @@ class EnhanceSliderWindow(Toplevel):
         self.cancel.pack(side='left', expand=1, padx=5, pady=5)
 
     def value_changed(self, value):
-        self.image = self.enhancer.enhance(self.factor.get())
-        self.update_method(self.current_tab, self.image)
+        image = self.enhancer.enhance(self.factor.get())
+        self.image_info.set_image(image)
+        self.image_info.update_image_on_canvas()
+
+    def apply(self):
+        self.image_info.unsaved = True
+        self.update_method(self.image_info)
+        self.close()
 
     def cancel(self):
-        self.update_method(self.current_tab, self.original)
+        self.image_info.set_image(self.original)
+        self.image_info.update_image_on_canvas()
+        self.update_method(self.image_info)
         self.close()
 
     def close(self):
